@@ -313,27 +313,27 @@ export default function MathNotes() {
         {latexItems.map((item, index) => (
           <div
             key={index}
-            className="absolute p-2 rounded-lg shadow-lg cursor-grab active:cursor-grabbing select-none"
+            className="absolute px-4 py-3 rounded-xl shadow-2xl cursor-grab active:cursor-grabbing select-none"
             style={{
               left: item.x,
               top: item.y,
               transform: 'translate(-50%, 0)',
-              background: 'rgba(0,0,0,0.75)',
-              backdropFilter: 'blur(8px)',
-              border: '1px solid rgba(255,255,255,0.15)',
+              background: 'rgba(0,0,0,0.85)',
+              backdropFilter: 'blur(12px)',
+              border: '1px solid rgba(255,255,255,0.2)',
               zIndex: 20,
             }}
             onMouseDown={(e) => handleDragStart(index, e)}
             onTouchStart={(e) => handleDragStart(index, e)}
           >
-            <div className="flex items-center gap-2">
-              <GripHorizontal className="h-3 w-3 text-muted-foreground shrink-0" />
-              <span
-                className="text-white text-lg"
+            <div className="flex items-center gap-3">
+              <GripHorizontal className="h-3.5 w-3.5 text-muted-foreground shrink-0 opacity-60" />
+              <div
+                className="text-white text-xl leading-relaxed [&_.katex]:text-xl [&_.katex_.mord]:mx-[0.05em] [&_.katex_.mbin]:mx-[0.25em] [&_.katex_.mrel]:mx-[0.3em] [&_.katex_.mopen]:ml-[0.05em] [&_.katex_.mclose]:mr-[0.05em]"
                 dangerouslySetInnerHTML={{
                   __html: (() => {
                     try {
-                      return katex.renderToString(item.latex, { throwOnError: false, displayMode: false });
+                      return katex.renderToString(item.latex, { throwOnError: false, displayMode: true });
                     } catch {
                       return item.latex;
                     }
