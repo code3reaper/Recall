@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Brain, Search, Sparkles, FileText, Link, Loader2 } from 'lucide-react';
+import { Brain, Search, Sparkles, FileText, Link, Loader2, Calculator } from 'lucide-react';
 
 const Index = () => {
   const { user, loading } = useAuth();
@@ -113,30 +114,52 @@ const Index = () => {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
               {
                 icon: FileText,
                 title: 'Notes & Ideas',
-                description: 'Capture thoughts, meeting notes, and ideas. All fully searchable by meaning, not just keywords.',
+                description: 'Capture thoughts, meeting notes, and ideas. All fully searchable by meaning.',
               },
               {
                 icon: Link,
                 title: 'Links & Resources',
-                description: 'Save articles, documentation, and resources. Find them later by describing what you need.',
+                description: 'Save articles and resources. Find them later by describing what you need.',
               },
               {
                 icon: Search,
                 title: 'Semantic Search',
-                description: 'Our AI understands context. Search "that React tutorial about hooks" and find exactly what you meant.',
+                description: 'AI understands context. Search by meaning, not just keywords.',
               },
-            ].map(({ icon: Icon, title, description }) => (
-              <div key={title} className="glass-card rounded-2xl p-6 text-center">
-                <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-accent/10 mb-4">
+              {
+                icon: Calculator,
+                title: 'Math Notes',
+                description: 'Draw math expressions on a canvas and get instant AI-powered solutions with LaTeX rendering.',
+                highlight: true,
+              },
+            ].map(({ icon: Icon, title, description, highlight }) => (
+              <div 
+                key={title} 
+                className={cn(
+                  "glass-card rounded-2xl p-6 text-center transition-all",
+                  highlight && "ring-2 ring-accent/50 shadow-glow"
+                )}
+                onClick={highlight ? () => navigate('/math-notes') : undefined}
+                style={highlight ? { cursor: 'pointer' } : undefined}
+              >
+                <div className={cn(
+                  "inline-flex items-center justify-center w-14 h-14 rounded-xl mb-4",
+                  highlight ? "bg-accent/20" : "bg-accent/10"
+                )}>
                   <Icon className="h-7 w-7 text-accent" />
                 </div>
                 <h3 className="text-xl font-display font-semibold mb-2">{title}</h3>
-                <p className="text-muted-foreground">{description}</p>
+                <p className="text-muted-foreground text-sm">{description}</p>
+                {highlight && (
+                  <span className="inline-block mt-3 text-xs font-medium text-accent bg-accent/10 px-3 py-1 rounded-full">
+                    ✨ New Feature
+                  </span>
+                )}
               </div>
             ))}
           </div>
