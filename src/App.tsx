@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
+import MathNotes from "./pages/MathNotes";
 import SharedMemory from "./pages/SharedMemory";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
@@ -45,6 +46,14 @@ const App = () => (
             element={
               <ProtectedRoute>
                 <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/math-notes"
+            element={
+              <ProtectedRoute>
+                <MathNotes />
               </ProtectedRoute>
             }
           />
