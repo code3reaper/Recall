@@ -26,7 +26,7 @@ import { ExplainWithNotesPanel } from '@/components/ExplainWithNotesPanel';
 import { CompressionPanel } from '@/components/CompressionPanel';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Brain, LogOut, Loader2, FileText, Link, Image, FileIcon, Calendar, X, Mic, Bookmark, Sparkles, PanelLeftClose, PanelLeft, Scale, Lightbulb, Minimize2, Zap } from 'lucide-react';
+import { Brain, LogOut, Loader2, FileText, Link, Image, FileIcon, Calendar, X, Mic, Bookmark, Sparkles, PanelLeftClose, PanelLeft, Scale, Lightbulb, Minimize2, Zap, Calculator } from 'lucide-react';
 import type { Memory, MemoryType, DecisionOutcome } from '@/types/memory';
 import { cn } from '@/lib/utils';
 import { useDummyData } from '@/hooks/useDummyData';
@@ -229,6 +229,15 @@ export default function Dashboard() {
           </div>
 
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate('/math-notes')}
+              className="gap-1.5 hidden sm:flex"
+            >
+              <Calculator className="h-4 w-4" />
+              Math Notes
+            </Button>
             <ExportButton memories={memories} />
             <Button
               variant="ghost"
