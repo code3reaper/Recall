@@ -82,6 +82,14 @@ export function MemoryDetailDrawer({
     }
   }, [memory?.file_path]);
 
+  if (!memory) {
+    return (
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent className="w-full sm:max-w-xl" />
+      </Sheet>
+    );
+  }
+
   const Icon = typeIcons[memory.type];
   const tags = memory.tags || (memory.metadata as { tags?: string[] })?.tags || [];
 
