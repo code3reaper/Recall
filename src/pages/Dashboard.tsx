@@ -26,7 +26,7 @@ import { ExplainWithNotesPanel } from '@/components/ExplainWithNotesPanel';
 import { CompressionPanel } from '@/components/CompressionPanel';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Brain, LogOut, Loader2, FileText, Link, Image, FileIcon, Calendar, X, Mic, Bookmark, Sparkles, PanelLeftClose, PanelLeft, Scale, Lightbulb, Minimize2, Zap, Calculator } from 'lucide-react';
+import { Brain, LogOut, Loader2, FileText, Link, Image, FileIcon, Calendar, X, Mic, Bookmark, Sparkles, PanelLeftClose, PanelLeft, Scale, Lightbulb, Minimize2, Calculator } from 'lucide-react';
 import type { Memory, MemoryType, DecisionOutcome } from '@/types/memory';
 import { cn } from '@/lib/utils';
 import { useDummyData } from '@/hooks/useDummyData';
@@ -82,7 +82,7 @@ export default function Dashboard() {
   const [showSidebar, setShowSidebar] = useState(true);
   const [seedingData, setSeedingData] = useState(false);
   const [forceAddDemo, setForceAddDemo] = useState(false);
-  const [processingEmbeddings, setProcessingEmbeddings] = useState(false);
+  
   const [mainTab, setMainTab] = useState<'memories' | 'decisions' | 'ai-tools'>('memories');
   
   // Drawer/Modal states
@@ -166,11 +166,7 @@ export default function Dashboard() {
     setSeedingData(false);
   };
 
-  const handleBatchProcess = async () => {
-    setProcessingEmbeddings(true);
-    await batchProcessMemories();
-    setProcessingEmbeddings(false);
-  };
+  
 
   // Filter memories by selected date, tags, and collection
   const filteredMemories = useMemo(() => {
@@ -538,50 +534,27 @@ export default function Dashboard() {
 
               {/* AI Tools Tab */}
               <TabsContent value="ai-tools">
-                {/* Index Memories for Search */}
-                <div className="mb-6 p-4 bg-muted/50 border border-border rounded-xl">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-semibold flex items-center gap-2">
-                        <Zap className="h-4 w-4 text-primary" />
-                        Enable Semantic Search
-                      </h3>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Process your memories to enable AI-powered semantic search
-                      </p>
+                <div className="space-y-6">
+                  <div className="text-center mb-2">
+                    <h2 className="text-2xl font-display font-semibold mb-1">AI-Powered Tools</h2>
+                    <p className="text-muted-foreground">
+                      Your memories are automatically indexed for search when uploaded.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-6 md:grid-cols-2">
+                    {/* Explain With Notes */}
+                    <div className="p-6 bg-card border border-border rounded-xl">
+                      <ExplainWithNotesPanel />
                     </div>
-                    <Button
-                      onClick={handleBatchProcess}
-                      disabled={processingEmbeddings}
-                      className="gap-2"
-                    >
-                      {processingEmbeddings ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Processing...
-                        </>
-                      ) : (
-                        <>
-                          <Zap className="h-4 w-4" />
-                          Generate Embeddings
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </div>
 
-                <div className="grid gap-6 md:grid-cols-2">
-                  {/* Explain With Notes */}
-                  <div className="p-6 bg-card border border-border rounded-xl">
-                    <ExplainWithNotesPanel />
-                  </div>
-
-                  {/* Compression */}
-                  <div className="p-6 bg-card border border-border rounded-xl">
-                    <CompressionPanel 
-                      memories={memories} 
-                      onCompress={handleCompressMemory} 
-                    />
+                    {/* Compression */}
+                    <div className="p-6 bg-card border border-border rounded-xl">
+                      <CompressionPanel 
+                        memories={memories} 
+                        onCompress={handleCompressMemory} 
+                      />
+                    </div>
                   </div>
                 </div>
               </TabsContent>

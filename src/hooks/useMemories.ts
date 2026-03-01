@@ -320,9 +320,13 @@ export function useMemories() {
     return { error: null };
   };
 
-  const getFileUrl = (filePath: string): string => {
-    const { data } = supabase.storage.from('memories').getPublicUrl(filePath);
-    return data.publicUrl;
+  const getFileUrl = async (filePath: string): Promise<string> => {
+    const { data, error } = await supabase.storage.from('memories').createSignedUrl(filePath, 3600);
+    if (error || !data?.signedUrl) {
+      console.error('Error creating signed URL:', error);
+      return '';
+    }
+    return data.signedUrl;
   };
 
   const createDecision = async (

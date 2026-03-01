@@ -4,7 +4,7 @@ import type { Memory, MemoryType } from '@/types/memory';
 import type { Collection } from '@/types/collection';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import {
   Dialog,
@@ -92,13 +92,15 @@ export function MemoryCard({
     return text.slice(0, 150) + (text.length > 150 ? '...' : '');
   };
 
-  const getFileUrl = () => {
-    if (!memory.file_path) return null;
-    const { data } = supabase.storage.from('memories').getPublicUrl(memory.file_path);
-    return data.publicUrl;
-  };
+  const [fileUrl, setFileUrl] = useState<string | null>(null);
 
-  const fileUrl = memory.file_path ? getFileUrl() : null;
+  useEffect(() => {
+    if (memory.file_path) {
+      supabase.storage.from('memories').createSignedUrl(memory.file_path, 3600).then(({ data }) => {
+        if (data?.signedUrl) setFileUrl(data.signedUrl);
+      });
+    }
+  }, [memory.file_path]);
 
   return (
     <>
