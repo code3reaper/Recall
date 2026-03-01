@@ -70,16 +70,19 @@ export function MemoryDetailDrawer({
     setLoadingChunks(false);
   };
 
-  const getFileUrl = () => {
-    if (!memory?.file_path) return null;
-    const { data } = supabase.storage.from('memories').getPublicUrl(memory.file_path);
-    return data.publicUrl;
-  };
+  const [fileUrl, setFileUrl] = useState<string | null>(null);
 
-  if (!memory) return null;
+  useEffect(() => {
+    if (memory?.file_path) {
+      supabase.storage.from('memories').createSignedUrl(memory.file_path, 3600).then(({ data }) => {
+        if (data?.signedUrl) setFileUrl(data.signedUrl);
+      });
+    } else {
+      setFileUrl(null);
+    }
+  }, [memory?.file_path]);
 
   const Icon = typeIcons[memory.type];
-  const fileUrl = memory.file_path ? getFileUrl() : null;
   const tags = memory.tags || (memory.metadata as { tags?: string[] })?.tags || [];
 
   return (

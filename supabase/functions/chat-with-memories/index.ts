@@ -61,51 +61,72 @@ serve(async (req) => {
         return `[${m.type.toUpperCase()}] "${m.title}" ${tags}\n${content.slice(0, 800)}`;
       }).join("\n\n---\n\n");
     } else {
-      // Standard semantic search for regular queries
-      const queryEmbedding = await generateQueryEmbedding(query, lovableApiKey);
-      
-      if (queryEmbedding) {
-        const { data: results } = await supabase.rpc("match_memories", {
-          query_embedding: queryEmbedding,
-          match_user_id: userId,
-          match_threshold: 0.3,
-          match_count: 8,
-        });
+      // Fetch all user memories and use AI to pick the most relevant ones
+      const { data: allMemories } = await supabase
+        .from("memories")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(50);
 
-        if (results && results.length > 0) {
-          const memoryIds = [...new Set(results.map((r: any) => r.memory_id))];
-          const { data: fetchedMemories } = await supabase
-            .from("memories")
-            .select("*")
-            .in("id", memoryIds);
+      const allMems = allMemories || [];
 
-          memories = fetchedMemories || [];
-          
-          relevantContext = memories.map((m: any) => {
-            const content = m.content || m.extracted_text || "";
-            const tags = m.tags?.length ? `[Tags: ${m.tags.join(', ')}]` : '';
-            return `[${m.type.toUpperCase()}] "${m.title}" ${tags}\n${content.slice(0, 600)}`;
-          }).join("\n\n---\n\n");
+      if (allMems.length > 0) {
+        // Build candidate list for AI reranking
+        const candidates = allMems.map((m: any, i: number) => {
+          const content = m.content || m.extracted_text || "";
+          return `[${i}] [${m.type}] "${m.title}" - ${content.slice(0, 200)}`;
+        }).join("\n");
+
+        // Use AI to pick the most relevant memories
+        try {
+          const rankResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${lovableApiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "google/gemini-2.5-flash-lite",
+              messages: [
+                { role: "system", content: "You select the most relevant items for a query. Return ONLY a JSON array of indices, e.g. [0,3,5]. Max 8 items." },
+                { role: "user", content: `Query: "${query}"\n\nCandidates:\n${candidates}` },
+              ],
+              temperature: 0,
+            }),
+          });
+
+          if (rankResponse.ok) {
+            const rankData = await rankResponse.json();
+            const rankContent = rankData.choices?.[0]?.message?.content || "[]";
+            const match = rankContent.match(/\[[\d,\s]+\]/);
+            if (match) {
+              const indices: number[] = JSON.parse(match[0]);
+              const selected = indices.filter(i => i >= 0 && i < allMems.length).map(i => allMems[i]);
+              if (selected.length > 0) {
+                memories = selected;
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Reranking failed, using all memories:", e);
         }
-      }
 
-      // Fallback to keyword search
-      if (!relevantContext) {
-        const { data: keywordResults } = await supabase
-          .from("memories")
-          .select("*")
-          .eq("user_id", userId)
-          .or(`title.ilike.%${query}%,content.ilike.%${query}%,extracted_text.ilike.%${query}%`)
-          .limit(8);
-
-        if (keywordResults && keywordResults.length > 0) {
-          memories = keywordResults;
-          relevantContext = keywordResults.map((m: any) => {
-            const content = m.content || m.extracted_text || "";
-            const tags = m.tags?.length ? `[Tags: ${m.tags.join(', ')}]` : '';
-            return `[${m.type.toUpperCase()}] "${m.title}" ${tags}\n${content.slice(0, 600)}`;
-          }).join("\n\n---\n\n");
+        // Fallback: if reranking didn't select anything, use keyword match or all
+        if (memories.length === 0) {
+          const queryWords = query.toLowerCase().split(/\s+/).filter((w: string) => w.length > 2);
+          memories = allMems.filter((m: any) => {
+            const text = `${m.title} ${m.content || ''} ${m.extracted_text || ''}`.toLowerCase();
+            return queryWords.some((w: string) => text.includes(w));
+          });
+          if (memories.length === 0) memories = allMems.slice(0, 10);
         }
+
+        relevantContext = memories.map((m: any) => {
+          const content = m.content || m.extracted_text || "";
+          const tags = m.tags?.length ? `[Tags: ${m.tags.join(', ')}]` : '';
+          return `[${m.type.toUpperCase()}] "${m.title}" ${tags}\n${content.slice(0, 800)}`;
+        }).join("\n\n---\n\n");
       }
     }
 

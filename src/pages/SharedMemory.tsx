@@ -83,10 +83,15 @@ export default function SharedMemory() {
     }
   };
 
-  const getFileUrl = (filePath: string): string => {
-    const { data } = supabase.storage.from('memories').getPublicUrl(filePath);
-    return data.publicUrl;
-  };
+  const [fileUrl, setFileUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (memory?.file_path) {
+      supabase.storage.from('memories').createSignedUrl(memory.file_path, 3600).then(({ data }) => {
+        if (data?.signedUrl) setFileUrl(data.signedUrl);
+      });
+    }
+  }, [memory?.file_path]);
 
   if (loading) {
     return (
@@ -206,26 +211,26 @@ export default function SharedMemory() {
             </div>
           )}
 
-          {memory.type === 'image' && memory.file_path && (
+          {memory.type === 'image' && fileUrl && (
             <div className="rounded-xl overflow-hidden border border-border">
               <img
-                src={getFileUrl(memory.file_path)}
+                src={fileUrl}
                 alt={memory.title}
                 className="w-full h-auto"
               />
             </div>
           )}
 
-          {memory.type === 'voice_memo' && memory.file_path && (
+          {memory.type === 'voice_memo' && fileUrl && (
             <div className="p-4 bg-muted rounded-xl">
               <audio controls className="w-full">
-                <source src={getFileUrl(memory.file_path)} />
+                <source src={fileUrl} />
                 Your browser does not support the audio element.
               </audio>
             </div>
           )}
 
-          {memory.type === 'pdf' && memory.file_path && (
+          {memory.type === 'pdf' && fileUrl && (
             <div className="p-4 bg-muted rounded-xl flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <FileIcon className="h-10 w-10 text-muted-foreground" />
@@ -235,7 +240,7 @@ export default function SharedMemory() {
                 </div>
               </div>
               <a
-                href={getFileUrl(memory.file_path)}
+                href={fileUrl}
                 target="_blank"
                 rel="noopener noreferrer"
               >

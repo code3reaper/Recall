@@ -27,7 +27,6 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Fetch the memory
     const { data: memory, error: memoryError } = await supabase
       .from("memories")
       .select("*")
@@ -46,32 +45,30 @@ serve(async (req) => {
     let extractedText = "";
 
     // Handle image OCR
-    if (memory.type === "image" && memory.file_path) {
+    if (memory.type === "image" && memory.file_path && !memory.extracted_text) {
       console.log("Processing image for OCR:", memory.file_path);
-      extractedText = await extractTextFromImage(supabase, memory.file_path, lovableApiKey);
-      
-      if (extractedText) {
-        textToEmbed = extractedText;
-        // Update memory with extracted text
-        await supabase
-          .from("memories")
-          .update({ extracted_text: extractedText })
-          .eq("id", memoryId);
+      try {
+        extractedText = await extractTextFromFile(supabase, memory.file_path, lovableApiKey, "image");
+        if (extractedText) {
+          textToEmbed = extractedText;
+          await supabase.from("memories").update({ extracted_text: extractedText }).eq("id", memoryId);
+        }
+      } catch (e) {
+        console.error("Image OCR failed:", e);
       }
     }
 
     // Handle PDF text extraction
-    if (memory.type === "pdf" && memory.file_path) {
-      console.log("Processing PDF for text extraction:", memory.file_path);
-      extractedText = await extractTextFromPDF(supabase, memory.file_path, lovableApiKey);
-      
-      if (extractedText) {
-        textToEmbed = extractedText;
-        // Update memory with extracted text
-        await supabase
-          .from("memories")
-          .update({ extracted_text: extractedText })
-          .eq("id", memoryId);
+    if (memory.type === "pdf" && memory.file_path && !memory.extracted_text) {
+      console.log("Processing PDF:", memory.file_path);
+      try {
+        extractedText = await extractTextFromFile(supabase, memory.file_path, lovableApiKey, "pdf");
+        if (extractedText) {
+          textToEmbed = extractedText;
+          await supabase.from("memories").update({ extracted_text: extractedText }).eq("id", memoryId);
+        }
+      } catch (e) {
+        console.error("PDF extraction failed:", e);
       }
     }
 
@@ -85,36 +82,25 @@ serve(async (req) => {
     // Split text into chunks
     const chunks = splitIntoChunks(textToEmbed, 500, 50);
 
-    // Delete existing chunks for this memory
-    await supabase
-      .from("memory_chunks")
-      .delete()
-      .eq("memory_id", memoryId);
+    // Delete existing chunks
+    await supabase.from("memory_chunks").delete().eq("memory_id", memoryId);
 
-    // Generate embeddings and store chunks
+    // Store chunks with simple embeddings (search uses AI reranking anyway)
     for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i];
-      const embedding = await generateEmbedding(chunk, lovableApiKey);
-      
-      if (embedding) {
-        await supabase.from("memory_chunks").insert({
-          memory_id: memoryId,
-          user_id: memory.user_id,
-          chunk_index: i,
-          chunk_text: chunk,
-          embedding: embedding,
-        });
-      }
+      const embedding = generateSimpleEmbedding(chunks[i]);
+      await supabase.from("memory_chunks").insert({
+        memory_id: memoryId,
+        user_id: memory.user_id,
+        chunk_index: i,
+        chunk_text: chunks[i],
+        embedding: JSON.stringify(embedding),
+      });
     }
 
     console.log(`Processed memory ${memoryId}: ${chunks.length} chunks created`);
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        chunksProcessed: chunks.length,
-        extractedText: extractedText || undefined
-      }),
+      JSON.stringify({ success: true, chunksProcessed: chunks.length, extractedText: extractedText || undefined }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
@@ -126,215 +112,90 @@ serve(async (req) => {
   }
 });
 
-async function extractTextFromImage(
+async function extractTextFromFile(
   supabase: any,
   filePath: string,
-  apiKey: string
+  apiKey: string,
+  type: "image" | "pdf"
 ): Promise<string> {
-  try {
-    // Download the image from storage
-    const { data: fileData, error: downloadError } = await supabase.storage
-      .from("memories")
-      .download(filePath);
+  const { data: fileData, error: downloadError } = await supabase.storage
+    .from("memories")
+    .download(filePath);
 
-    if (downloadError || !fileData) {
-      console.error("Error downloading image:", downloadError);
-      return "";
-    }
-
-    // Convert to base64
-    const arrayBuffer = await fileData.arrayBuffer();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-    const mimeType = filePath.endsWith(".png") ? "image/png" : "image/jpeg";
-
-    // Use Gemini for OCR via vision capabilities
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: "Extract ALL text visible in this image. Include everything: headings, paragraphs, labels, captions, watermarks, etc. If there's no text, describe what you see in the image. Be thorough and accurate."
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:${mimeType};base64,${base64}`
-                }
-              }
-            ]
-          }
-        ],
-        temperature: 0,
-        max_tokens: 4000,
-      }),
-    });
-
-    if (!response.ok) {
-      console.error("OCR API error:", response.status);
-      return "";
-    }
-
-    const data = await response.json();
-    const extractedText = data.choices?.[0]?.message?.content || "";
-    console.log("OCR extracted text length:", extractedText.length);
-    return extractedText;
-  } catch (error) {
-    console.error("Error in OCR extraction:", error);
+  if (downloadError || !fileData) {
+    console.error("Error downloading file:", downloadError);
     return "";
   }
-}
 
-async function extractTextFromPDF(
-  supabase: any,
-  filePath: string,
-  apiKey: string
-): Promise<string> {
-  try {
-    // Download the PDF from storage
-    const { data: fileData, error: downloadError } = await supabase.storage
-      .from("memories")
-      .download(filePath);
+  const arrayBuffer = await fileData.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
+  
+  // Convert to base64 in chunks to avoid stack overflow
+  let binary = "";
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.slice(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  const base64 = btoa(binary);
 
-    if (downloadError || !fileData) {
-      console.error("Error downloading PDF:", downloadError);
-      return "";
-    }
+  const mimeType = type === "pdf" ? "application/pdf" : 
+    filePath.endsWith(".png") ? "image/png" : "image/jpeg";
 
-    // Convert to base64
-    const arrayBuffer = await fileData.arrayBuffer();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+  const prompt = type === "pdf"
+    ? "Extract ALL text content from this PDF document. Preserve structure - include headings, paragraphs, lists, tables. Be thorough."
+    : "Extract ALL text visible in this image. Include headings, paragraphs, labels, captions. If no text, describe the image.";
 
-    // Use Gemini for PDF text extraction (it supports PDF as image input)
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: "Extract ALL text content from this PDF document. Preserve the structure as much as possible - include headings, paragraphs, lists, tables (as text), etc. Be thorough and extract every piece of text you can find."
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:application/pdf;base64,${base64}`
-                }
-              }
-            ]
-          }
-        ],
-        temperature: 0,
-        max_tokens: 8000,
-      }),
-    });
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: prompt },
+            { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64}` } },
+          ],
+        },
+      ],
+      temperature: 0,
+      max_tokens: 8000,
+    }),
+  });
 
-    if (!response.ok) {
-      console.error("PDF extraction API error:", response.status);
-      return "";
-    }
-
-    const data = await response.json();
-    const extractedText = data.choices?.[0]?.message?.content || "";
-    console.log("PDF extracted text length:", extractedText.length);
-    return extractedText;
-  } catch (error) {
-    console.error("Error in PDF extraction:", error);
+  if (!response.ok) {
+    console.error("AI extraction error:", response.status, await response.text());
     return "";
   }
+
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || "";
 }
 
 function splitIntoChunks(text: string, chunkSize: number, overlap: number): string[] {
   const chunks: string[] = [];
   let start = 0;
-
   while (start < text.length) {
-    const end = Math.min(start + chunkSize, text.length);
-    chunks.push(text.slice(start, end));
+    chunks.push(text.slice(start, Math.min(start + chunkSize, text.length)));
     start += chunkSize - overlap;
   }
-
-  return chunks.filter((chunk) => chunk.trim().length > 0);
-}
-
-async function generateEmbedding(text: string, apiKey: string): Promise<number[] | null> {
-  try {
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          {
-            role: "system",
-            content: "You are an embedding generator. Given text, output ONLY a JSON array of 768 floating point numbers between -1 and 1 that semantically represent the text. Output nothing else, just the raw JSON array."
-          },
-          {
-            role: "user",
-            content: `Generate a semantic embedding for this text: "${text.slice(0, 1000)}"`
-          }
-        ],
-        temperature: 0,
-      }),
-    });
-
-    if (!response.ok) {
-      console.error("AI gateway error:", response.status);
-      return generateSimpleEmbedding(text);
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || "";
-    
-    try {
-      const embedding = JSON.parse(content);
-      if (Array.isArray(embedding) && embedding.length === 768) {
-        return embedding;
-      }
-    } catch {
-      // If parsing fails, use simple embedding
-    }
-    
-    return generateSimpleEmbedding(text);
-  } catch (error) {
-    console.error("Error generating embedding:", error);
-    return generateSimpleEmbedding(text);
-  }
+  return chunks.filter((c) => c.trim().length > 0);
 }
 
 function generateSimpleEmbedding(text: string): number[] {
   const embedding = new Array(768).fill(0);
-  const normalizedText = text.toLowerCase();
-  
-  for (let i = 0; i < normalizedText.length && i < 768; i++) {
-    const charCode = normalizedText.charCodeAt(i);
-    embedding[i % 768] += (charCode - 96) / 26;
+  const normalized = text.toLowerCase();
+  for (let i = 0; i < normalized.length && i < 768; i++) {
+    embedding[i % 768] += (normalized.charCodeAt(i) - 96) / 26;
   }
-  
   const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
   if (magnitude > 0) {
-    for (let i = 0; i < 768; i++) {
-      embedding[i] /= magnitude;
-    }
+    for (let i = 0; i < 768; i++) embedding[i] /= magnitude;
   }
-  
   return embedding;
 }
