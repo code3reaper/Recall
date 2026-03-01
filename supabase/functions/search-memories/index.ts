@@ -27,37 +27,73 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Generate embedding for the query
-    const queryEmbedding = await generateQueryEmbedding(query, lovableApiKey);
+    // Step 1: Fetch candidate chunks via keyword pre-filter + recent chunks
+    const queryWords = query.toLowerCase().split(/\s+/).filter((w: string) => w.length > 2);
+    
+    // Get chunks that match keywords OR are recent
+    const { data: allChunks, error: chunksError } = await supabase
+      .from("memory_chunks")
+      .select("id, memory_id, chunk_text, chunk_index")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(100);
 
-    if (!queryEmbedding) {
+    if (chunksError) {
+      console.error("Error fetching chunks:", chunksError);
       return new Response(
-        JSON.stringify({ error: "Failed to generate query embedding" }),
+        JSON.stringify({ error: "Failed to fetch memory chunks" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Perform semantic search using the match_memories function
-    // Convert embedding array to PostgreSQL vector string format
-    const embeddingString = `[${queryEmbedding.join(",")}]`;
-    
-    const { data: results, error: searchError } = await supabase.rpc("match_memories", {
-      query_embedding: embeddingString,
-      match_user_id: userId,
-      match_threshold: 0.1, // Lower threshold for better recall
-      match_count: 10,
+    if (!allChunks || allChunks.length === 0) {
+      // Fallback: search directly in memories table
+      const { data: directResults } = await supabase
+        .from("memories")
+        .select("*")
+        .eq("user_id", userId)
+        .or(`title.ilike.%${query}%,content.ilike.%${query}%,extracted_text.ilike.%${query}%`)
+        .order("created_at", { ascending: false })
+        .limit(10);
+
+      if (directResults && directResults.length > 0) {
+        const results = directResults.map((m) => ({
+          memory_id: m.id,
+          chunk_id: m.id,
+          chunk_text: (m.content || m.extracted_text || m.title).slice(0, 300),
+          similarity: 0.8,
+        }));
+        return new Response(
+          JSON.stringify({ results }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ results: [] }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Step 2: Pre-score chunks with keyword matching to narrow candidates
+    const scoredChunks = allChunks.map((chunk) => {
+      const text = chunk.chunk_text.toLowerCase();
+      let keywordScore = 0;
+      for (const word of queryWords) {
+        if (text.includes(word)) keywordScore++;
+      }
+      return { ...chunk, keywordScore };
     });
 
-    if (searchError) {
-      console.error("Search error:", searchError);
-      return new Response(
-        JSON.stringify({ error: "Search failed" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    // Sort by keyword relevance, take top 30 candidates for AI reranking
+    scoredChunks.sort((a, b) => b.keywordScore - a.keywordScore);
+    const candidates = scoredChunks.slice(0, 30);
+
+    // Step 3: Use AI to semantically rerank candidates
+    const rankedResults = await rerankWithAI(query, candidates, lovableApiKey);
 
     return new Response(
-      JSON.stringify({ results: results || [] }),
+      JSON.stringify({ results: rankedResults }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
@@ -69,7 +105,29 @@ serve(async (req) => {
   }
 });
 
-async function generateQueryEmbedding(query: string, apiKey: string): Promise<number[] | null> {
+interface ChunkCandidate {
+  id: string;
+  memory_id: string;
+  chunk_text: string;
+  chunk_index: number;
+  keywordScore: number;
+}
+
+async function rerankWithAI(
+  query: string,
+  candidates: ChunkCandidate[],
+  apiKey: string
+): Promise<{ memory_id: string; chunk_id: string; chunk_text: string; similarity: number }[]> {
+  if (candidates.length === 0) return [];
+
+  // If all candidates have 0 keyword score and there are many, just return top by recency
+  const hasKeywordMatches = candidates.some(c => c.keywordScore > 0);
+  
+  // Build numbered list for AI
+  const numberedChunks = candidates
+    .map((c, i) => `[${i}] ${c.chunk_text.slice(0, 200)}`)
+    .join("\n\n");
+
   try {
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -78,15 +136,15 @@ async function generateQueryEmbedding(query: string, apiKey: string): Promise<nu
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "google/gemini-2.5-flash-lite",
         messages: [
           {
             role: "system",
-            content: "You are an embedding generator. Given a search query, output ONLY a JSON array of 768 floating point numbers between -1 and 1 that semantically represent the query for similarity matching. Output nothing else, just the raw JSON array."
+            content: `You are a search relevance ranker. Given a search query and numbered text chunks, return ONLY a JSON array of the indices of the most relevant chunks, ordered by relevance (most relevant first). Return at most 10 indices. Output ONLY the JSON array of numbers, nothing else. Example: [3, 0, 7, 1]`
           },
           {
             role: "user",
-            content: `Generate a semantic embedding for this search query: "${query}"`
+            content: `Search query: "${query}"\n\nChunks:\n${numberedChunks}`
           }
         ],
         temperature: 0,
@@ -94,44 +152,62 @@ async function generateQueryEmbedding(query: string, apiKey: string): Promise<nu
     });
 
     if (!response.ok) {
-      console.error("AI gateway error:", response.status);
-      return generateSimpleEmbedding(query);
+      console.error("AI reranking error:", response.status);
+      // Fallback: return keyword-scored results
+      return fallbackResults(candidates);
     }
 
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content || "";
-    
-    try {
-      const embedding = JSON.parse(content);
-      if (Array.isArray(embedding) && embedding.length === 768) {
-        return embedding;
-      }
-    } catch {
-      // If parsing fails, use simple embedding
+
+    // Parse the ranked indices
+    const jsonMatch = content.match(/\[[\d\s,]*\]/);
+    if (!jsonMatch) {
+      console.error("Could not parse AI ranking response:", content);
+      return fallbackResults(candidates);
     }
-    
-    return generateSimpleEmbedding(query);
+
+    const rankedIndices: number[] = JSON.parse(jsonMatch[0]);
+    const results: { memory_id: string; chunk_id: string; chunk_text: string; similarity: number }[] = [];
+    const seen = new Set<string>();
+
+    for (let rank = 0; rank < rankedIndices.length; rank++) {
+      const idx = rankedIndices[rank];
+      if (idx < 0 || idx >= candidates.length) continue;
+      const chunk = candidates[idx];
+      
+      // Deduplicate by memory_id
+      if (seen.has(chunk.memory_id)) continue;
+      seen.add(chunk.memory_id);
+
+      results.push({
+        memory_id: chunk.memory_id,
+        chunk_id: chunk.id,
+        chunk_text: chunk.chunk_text,
+        similarity: Math.max(0.5, 1 - rank * 0.08), // Decreasing similarity score by rank
+      });
+    }
+
+    return results;
   } catch (error) {
-    console.error("Error generating query embedding:", error);
-    return generateSimpleEmbedding(query);
+    console.error("AI reranking failed:", error);
+    return fallbackResults(candidates);
   }
 }
 
-function generateSimpleEmbedding(text: string): number[] {
-  const embedding = new Array(768).fill(0);
-  const normalizedText = text.toLowerCase();
-  
-  for (let i = 0; i < normalizedText.length && i < 768; i++) {
-    const charCode = normalizedText.charCodeAt(i);
-    embedding[i % 768] += (charCode - 96) / 26;
-  }
-  
-  const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
-  if (magnitude > 0) {
-    for (let i = 0; i < 768; i++) {
-      embedding[i] /= magnitude;
-    }
-  }
-  
-  return embedding;
+function fallbackResults(candidates: ChunkCandidate[]) {
+  const seen = new Set<string>();
+  return candidates
+    .filter(c => {
+      if (seen.has(c.memory_id)) return false;
+      seen.add(c.memory_id);
+      return true;
+    })
+    .slice(0, 10)
+    .map((c, i) => ({
+      memory_id: c.memory_id,
+      chunk_id: c.id,
+      chunk_text: c.chunk_text,
+      similarity: Math.max(0.3, 1 - i * 0.07),
+    }));
 }
