@@ -229,10 +229,10 @@ export default function Dashboard() {
               variant="outline"
               size="sm"
               onClick={() => navigate('/math-notes')}
-              className="gap-1.5 hidden sm:flex"
+              className="gap-1.5"
             >
               <Calculator className="h-4 w-4" />
-              Math Notes
+              <span className="hidden sm:inline">Math Notes</span>
             </Button>
             <ExportButton memories={memories} />
             <Button
