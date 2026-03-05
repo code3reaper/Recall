@@ -290,8 +290,12 @@ export default function MathNotes() {
           }
         }
 
-        const centerX = (minX + maxX) / 2;
-        const centerY = maxY + 30;
+        // Clamp positions within canvas bounds
+        const clampX = (val: number) => Math.max(80, Math.min(canvas.width - 80, val));
+        const clampY = (val: number) => Math.max(10, Math.min(canvas.height - 60, val));
+
+        const centerX = clampX((minX + maxX) / 2);
+        const baseY = maxY + 30;
 
         results.forEach((r) => {
           if (r.assign) {
@@ -302,7 +306,7 @@ export default function MathNotes() {
         const newItems = results.map((r, i) => ({
           latex: `${r.expr} = ${r.result}`,
           x: centerX,
-          y: centerY + i * 50,
+          y: clampY(baseY + i * 50),
         }));
 
         setLatexItems((prev) => [...prev, ...newItems]);
@@ -573,7 +577,7 @@ export default function MathNotes() {
       <div
         ref={containerRef}
         className={cn(
-          'flex-1 relative select-none',
+          'flex-1 relative select-none overflow-hidden',
           draggingShape ? 'cursor-crosshair' : tool === 'eraser' ? 'cursor-cell' : 'cursor-crosshair'
         )}
       >
@@ -603,10 +607,10 @@ export default function MathNotes() {
         {latexItems.map((item, index) => (
           <div
             key={index}
-            className="absolute px-4 py-3 rounded-xl shadow-2xl cursor-grab active:cursor-grabbing select-none"
+            className="absolute px-4 py-3 rounded-xl shadow-2xl cursor-grab active:cursor-grabbing select-none max-w-[90vw] sm:max-w-[70vw]"
             style={{
-              left: item.x,
-              top: item.y,
+              left: Math.max(0, Math.min(item.x, (containerRef.current?.clientWidth ?? 800) - 40)),
+              top: Math.max(0, Math.min(item.y, (containerRef.current?.clientHeight ?? 600) - 40)),
               transform: 'translate(-50%, 0)',
               background: 'rgba(0,0,0,0.85)',
               backdropFilter: 'blur(12px)',
@@ -616,14 +620,14 @@ export default function MathNotes() {
             onMouseDown={(e) => handleDragStart(index, e)}
             onTouchStart={(e) => handleDragStart(index, e)}
           >
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 overflow-x-auto scrollbar-hide">
               <GripHorizontal className="h-3.5 w-3.5 text-muted-foreground shrink-0 opacity-60" />
               <div
-                className="text-white text-xl leading-relaxed [&_.katex]:text-xl [&_.katex_.mord]:mx-[0.05em] [&_.katex_.mbin]:mx-[0.25em] [&_.katex_.mrel]:mx-[0.3em] [&_.katex_.mopen]:ml-[0.05em] [&_.katex_.mclose]:mr-[0.05em]"
+                className="text-white text-lg sm:text-xl leading-relaxed overflow-x-auto scrollbar-hide [&_.katex]:text-lg sm:[&_.katex]:text-xl [&_.katex_.mord]:mx-[0.05em] [&_.katex_.mbin]:mx-[0.25em] [&_.katex_.mrel]:mx-[0.3em] [&_.katex_.mopen]:ml-[0.05em] [&_.katex_.mclose]:mr-[0.05em]"
                 dangerouslySetInnerHTML={{
                   __html: (() => {
                     try {
-                      return katex.renderToString(item.latex, { throwOnError: false, displayMode: true });
+                      return katex.renderToString(item.latex, { throwOnError: false, displayMode: false });
                     } catch {
                       return item.latex;
                     }
