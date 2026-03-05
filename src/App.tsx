@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import MathNotes from "./pages/MathNotes";
+import Presentations from "./pages/Presentations";
 import SharedMemory from "./pages/SharedMemory";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
@@ -54,6 +55,14 @@ const App = () => (
             element={
               <ProtectedRoute>
                 <MathNotes />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/presentations"
+            element={
+              <ProtectedRoute>
+                <Presentations />
               </ProtectedRoute>
             }
           />
