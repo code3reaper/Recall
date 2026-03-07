@@ -217,7 +217,6 @@ export function SlideRenderer({ slide, index, templateId, isEditing, onUpdate, l
             value={slide.bigNumber || '0'}
             onChange={isEditing ? (v) => onUpdate?.('bigNumber', v) : undefined}
             className="text-6xl md:text-8xl font-bold block"
-            style={{ color: accentColor } as any}
             placeholder="100%"
           />
           <EditableText
