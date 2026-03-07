@@ -31,14 +31,22 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: `You are a presentation content generator. Generate engaging, well-structured slide content. Return structured data using the provided tool.`,
+            content: `You are a professional presentation designer. Generate engaging, well-structured slide content with varied layouts. Use different slide types for visual variety. For slides that would benefit from imagery, include an imagePrompt describing what image would complement the content. Return structured data using the provided tool.`,
           },
           {
             role: "user",
             content: `Create a ${numSlides}-slide presentation about: "${topic}". 
-Include a title slide, content slides with key points, and a conclusion slide.
-Each slide should have a clear title and 2-4 bullet points (or a subtitle for the title slide).
-Make the content informative, concise, and visually balanced.`,
+Use a variety of slide layouts:
+- "title" for the opening slide (with subtitle)
+- "content" for standard bullet-point slides  
+- "two-column" for comparing two sets of points
+- "image-left" or "image-right" for slides where an image would enhance the content
+- "quote" for impactful quotes or key takeaways
+- "big-number" for statistics or key metrics
+- "conclusion" for the closing slide
+
+Each slide should have a clear title. Include imagePrompt for image slides describing the ideal image.
+Make content informative, concise, and professionally structured.`,
           },
         ],
         tools: [
