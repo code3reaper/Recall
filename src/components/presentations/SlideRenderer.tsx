@@ -78,7 +78,7 @@ function EditableText({ value, onChange, className, placeholder, multiline }: {
   );
 }
 
-export function SlideRenderer({ slide, index, templateId, isEditing, onUpdate, loadingImage }: SlideRendererProps) {
+export function SlideRenderer({ slide, index, templateId, isEditing, onUpdate, loadingImage, onGenerateImage }: SlideRendererProps) {
   const template = getTemplate(templateId);
   const isDark = templateId !== 'minimal';
   const accentColor = template.gradientFrom;
