@@ -52,10 +52,35 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    console.log("AI response keys:", JSON.stringify(Object.keys(data)));
+    
+    // Try multiple response formats
+    let imageUrl: string | undefined;
+    
+    // Format 1: content array with image_url items
+    const content = data.choices?.[0]?.message?.content;
+    if (Array.isArray(content)) {
+      const imageItem = content.find((c: any) => c.type === 'image_url');
+      imageUrl = imageItem?.image_url?.url;
+    }
+    
+    // Format 2: inline_data in parts
+    if (!imageUrl && Array.isArray(content)) {
+      const inlineItem = content.find((c: any) => c.inline_data);
+      if (inlineItem?.inline_data) {
+        imageUrl = `data:${inlineItem.inline_data.mime_type};base64,${inlineItem.inline_data.data}`;
+      }
+    }
+
+    // Format 3: direct images array
+    if (!imageUrl) {
+      const img = data.choices?.[0]?.message?.images?.[0];
+      imageUrl = img?.image_url?.url || img?.url;
+    }
 
     if (!imageUrl) {
-      throw new Error("No image generated");
+      console.error("Full AI response:", JSON.stringify(data).substring(0, 2000));
+      throw new Error("No image generated - unexpected response format");
     }
 
     return new Response(JSON.stringify({ imageUrl }), {
