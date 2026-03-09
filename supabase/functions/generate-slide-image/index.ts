@@ -20,7 +20,7 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    const imagePrompt = `Professional presentation slide image: ${prompt}. Style: ${style}, clean, high-quality, suitable for a business presentation background or illustration. No text in the image.`;
+    const imagePrompt = `Generate a professional, high-quality image for a presentation slide about: ${prompt}. Style: ${style}, clean, suitable for a business presentation. No text in the image.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -29,7 +29,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3.1-flash-image-preview",
+        model: "google/gemini-2.5-flash-image",
         messages: [{ role: "user", content: imagePrompt }],
         modalities: ["image", "text"],
       }),
