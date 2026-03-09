@@ -10,6 +10,7 @@ interface SlideRendererProps {
   isEditing?: boolean;
   onUpdate?: (field: string, value: string | string[]) => void;
   loadingImage?: boolean;
+  onGenerateImage?: () => void;
 }
 
 function getTemplate(id: string): PresentationTemplate {
