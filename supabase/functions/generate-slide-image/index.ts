@@ -20,7 +20,7 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    const imagePrompt = `Professional presentation slide image: ${prompt}. Style: ${style}, clean, high-quality, suitable for a business presentation background or illustration. No text in the image.`;
+    const imagePrompt = `Generate a professional, high-quality image for a presentation slide about: ${prompt}. Style: ${style}, clean, suitable for a business presentation. No text in the image.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -29,7 +29,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3.1-flash-image-preview",
+        model: "google/gemini-2.5-flash-image",
         messages: [{ role: "user", content: imagePrompt }],
         modalities: ["image", "text"],
       }),
@@ -52,34 +52,30 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    console.log("AI response keys:", JSON.stringify(Object.keys(data)));
+    console.log("AI response structure:", JSON.stringify({
+      hasChoices: !!data.choices,
+      messageKeys: data.choices?.[0]?.message ? Object.keys(data.choices[0].message) : [],
+    }));
     
-    // Try multiple response formats
     let imageUrl: string | undefined;
-    
-    // Format 1: content array with image_url items
-    const content = data.choices?.[0]?.message?.content;
-    if (Array.isArray(content)) {
-      const imageItem = content.find((c: any) => c.type === 'image_url');
-      imageUrl = imageItem?.image_url?.url;
+
+    // Primary format: images array on message (per Lovable AI docs)
+    const img = data.choices?.[0]?.message?.images?.[0];
+    if (img) {
+      imageUrl = img.image_url?.url || img.url;
     }
     
-    // Format 2: inline_data in parts
-    if (!imageUrl && Array.isArray(content)) {
-      const inlineItem = content.find((c: any) => c.inline_data);
-      if (inlineItem?.inline_data) {
-        imageUrl = `data:${inlineItem.inline_data.mime_type};base64,${inlineItem.inline_data.data}`;
+    // Fallback: content array with image_url items
+    if (!imageUrl) {
+      const content = data.choices?.[0]?.message?.content;
+      if (Array.isArray(content)) {
+        const imageItem = content.find((c: any) => c.type === 'image_url');
+        imageUrl = imageItem?.image_url?.url;
       }
     }
 
-    // Format 3: direct images array
     if (!imageUrl) {
-      const img = data.choices?.[0]?.message?.images?.[0];
-      imageUrl = img?.image_url?.url || img?.url;
-    }
-
-    if (!imageUrl) {
-      console.error("Full AI response:", JSON.stringify(data).substring(0, 2000));
+      console.error("Full AI response:", JSON.stringify(data).substring(0, 3000));
       throw new Error("No image generated - unexpected response format");
     }
 

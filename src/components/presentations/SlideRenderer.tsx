@@ -10,6 +10,7 @@ interface SlideRendererProps {
   isEditing?: boolean;
   onUpdate?: (field: string, value: string | string[]) => void;
   loadingImage?: boolean;
+  onGenerateImage?: () => void;
 }
 
 function getTemplate(id: string): PresentationTemplate {
@@ -77,7 +78,7 @@ function EditableText({ value, onChange, className, placeholder, multiline }: {
   );
 }
 
-export function SlideRenderer({ slide, index, templateId, isEditing, onUpdate, loadingImage }: SlideRendererProps) {
+export function SlideRenderer({ slide, index, templateId, isEditing, onUpdate, loadingImage, onGenerateImage }: SlideRendererProps) {
   const template = getTemplate(templateId);
   const isDark = templateId !== 'minimal';
   const accentColor = template.gradientFrom;
@@ -93,7 +94,17 @@ export function SlideRenderer({ slide, index, templateId, isEditing, onUpdate, l
   );
 
   const imageBlock = (
-    <div className="relative w-full h-full rounded-xl overflow-hidden flex items-center justify-center bg-black/20">
+    <div
+      className={cn(
+        "relative w-full h-full rounded-xl overflow-hidden flex items-center justify-center bg-black/20",
+        !slide.imageUrl && !loadingImage && onGenerateImage && "cursor-pointer hover:bg-black/30 transition-colors"
+      )}
+      onClick={() => {
+        if (!slide.imageUrl && !loadingImage && onGenerateImage) {
+          onGenerateImage();
+        }
+      }}
+    >
       {loadingImage ? (
         <div className="flex flex-col items-center gap-2">
           <Loader2 className="h-8 w-8 animate-spin opacity-50" />
@@ -102,7 +113,7 @@ export function SlideRenderer({ slide, index, templateId, isEditing, onUpdate, l
       ) : slide.imageUrl ? (
         <img src={slide.imageUrl} alt="" className="w-full h-full object-cover" />
       ) : (
-        <div className="flex flex-col items-center gap-2 opacity-30">
+        <div className="flex flex-col items-center gap-2 opacity-30 hover:opacity-60 transition-opacity">
           <ImageIcon className="h-12 w-12" />
           <span className="text-xs">Click to generate image</span>
         </div>
