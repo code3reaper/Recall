@@ -378,6 +378,7 @@ export default function Presentations() {
                 isEditing={isEditing}
                 onUpdate={(field, value) => updateSlide(currentSlide, field, value)}
                 loadingImage={loadingImages.has(currentSlide)}
+                onGenerateImage={() => generateImage(currentSlide)}
               />
             </div>
 
