@@ -226,19 +226,15 @@ export default function Dashboard() {
 
           <div className="flex items-center gap-2">
             <Button
-              variant="outline"
-              size="sm"
               onClick={() => navigate('/math-notes')}
-              className="gap-1.5"
+              className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-md"
             >
               <Calculator className="h-4 w-4" />
               <span className="hidden sm:inline">Math Notes</span>
             </Button>
             <Button
-              variant="outline"
-              size="sm"
               onClick={() => navigate('/presentations')}
-              className="gap-1.5"
+              className="gap-2 bg-accent text-accent-foreground hover:bg-accent/80 shadow-md"
             >
               <Presentation className="h-4 w-4" />
               <span className="hidden sm:inline">Presentations</span>
